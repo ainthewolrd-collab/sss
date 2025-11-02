@@ -131,7 +131,7 @@ if #servers > 0 then
 
 	queue_on_teleport([[
 		print("🎃 Auto Candy Farm Reloading on new server...")
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/ainthewolrd-collab/sss/refs/heads/main/JJS%20AUTO"))()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/ainthewolrd-collab/sss/refs/heads/main/AUTO%20CANDY%20SEVER%20HOP"))()
 		task.wait(2) -- รอ environment server ใหม่
 	]])
 
