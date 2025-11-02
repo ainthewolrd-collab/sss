@@ -35,7 +35,7 @@ local candyTotal = 0
 local hopCount = 0
 
 -- Discord Webhook
-local webhookURL = "[https://canary.discord.com/api/webhooks/1434567789036830944/RMcjO9oDL9N82GCSKT_kFxEnp1fSNA09rw4IKo1Hr7JdhTzAhlH6On2vLc1wzmUvmRJI)"
+local webhookURL = "(https://canary.discord.com/api/webhooks/1434567789036830944/RMcjO9oDL9N82GCSKT_kFxEnp1fSNA09rw4IKo1Hr7JdhTzAhlH6On2vLc1wzmUvmRJI)"
 
 ---
 
