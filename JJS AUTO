@@ -1,5 +1,5 @@
--- ⚡ Ultra Instant TP Auto Candy Farm (Safe ServerHop + Continuous Auto Farm + GUI)
--- Author: Capm (modified with serverhop by Durckzdf)
+-- ⚡ Ultra Instant TP Auto Candy Farm (Safe ServerHop + Continuous Auto Farm + GUI + Fast Retry)
+-- Author: Capm (modified with fast retry serverhop by Durckzdf)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -35,144 +35,134 @@ ToggleButton.Text = "Auto Farm: ON"
 ToggleButton.Parent = ScreenGui
 
 ToggleButton.MouseButton1Click:Connect(function()
-autoFarm = not autoFarm
-if autoFarm then
-ToggleButton.Text = "Auto Farm: ON"
-print("🎃 Auto Farm ENABLED")
-else
-ToggleButton.Text = "Auto Farm: OFF"
-print("⏸ Auto Farm PAUSED")
-end
+	autoFarm = not autoFarm
+	if autoFarm then
+		ToggleButton.Text = "Auto Farm: ON"
+		print("🎃 Auto Farm ENABLED")
+	else
+		ToggleButton.Text = "Auto Farm: OFF"
+		print("⏸ Auto Farm PAUSED")
+	end
 end)
 
 --- Re-get HRP when respawning
 player.CharacterAdded:Connect(function(newChar)
-char = newChar
-hrp = char:WaitForChild("HumanoidRootPart")
-task.wait(2) -- รอ environment โหลดพร้อม
-print("🧙 Respawned, continuing auto farm...")
+	char = newChar
+	hrp = char:WaitForChild("HumanoidRootPart")
+	task.wait(2)
+	print("🧙 Respawned, continuing auto farm...")
 end)
 
 --- Get BasePart from Attachment
 local function getBasePartFromAttachment(attachment)
-if not attachment or not attachment:IsA("Attachment") then return nil end
-local parent = attachment.Parent
-while parent and not parent:IsA("BasePart") do
-parent = parent.Parent
-end
-return parent
+	if not attachment or not attachment:IsA("Attachment") then return nil end
+	local parent = attachment.Parent
+	while parent and not parent:IsA("BasePart") do
+		parent = parent.Parent
+	end
+	return parent
 end
 
 --- Teleport + Rapid Trigger
 local function teleportAndTrigger(prompt)
-if not prompt or not prompt:IsA("ProximityPrompt") then return end
-if not hrp or not hrp.Parent then return end
+	if not prompt or not prompt:IsA("ProximityPrompt") then return end
+	if not hrp or not hrp.Parent then return end
 
-local attachment = prompt.Parent
-local part = getBasePartFromAttachment(attachment)
-if not part then return end
+	local attachment = prompt.Parent
+	local part = getBasePartFromAttachment(attachment)
+	if not part then return end
 
-pcall(function()
-	prompt.HoldDuration = 0
-	prompt.RequiresLineOfSight = false
-	prompt.MaxActivationDistance = math.huge
-end)
-
-hrp.CFrame = part.CFrame + teleportOffset
-for i = 1, clickBurst do
-	task.defer(function()
-		pcall(function()
-			fireproximityprompt(prompt, 1)
-		end)
+	pcall(function()
+		prompt.HoldDuration = 0
+		prompt.RequiresLineOfSight = false
+		prompt.MaxActivationDistance = math.huge
 	end)
-end
 
-
+	hrp.CFrame = part.CFrame + teleportOffset
+	for i = 1, clickBurst do
+		task.defer(function()
+			pcall(function()
+				fireproximityprompt(prompt, 1)
+			end)
+		end)
+	end
 end
 
 --- Find all "Open" prompts
 local function getAllOpenPrompts()
-local prompts = {}
-for _, obj in ipairs(workspace:GetDescendants()) do
-if obj:IsA("ProximityPrompt") and obj.Enabled and obj.ActionText:lower() == targetActionText:lower() then
-table.insert(prompts, obj)
-end
-end
-return prompts
+	local prompts = {}
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if obj:IsA("ProximityPrompt") and obj.Enabled and obj.ActionText:lower() == targetActionText:lower() then
+			table.insert(prompts, obj)
+		end
+	end
+	return prompts
 end
 
---- Safe Server Hop
+--- Fast Server Hop (Retry until found)
 local function serverHop()
-if tick() - lastServerHop < serverHopCooldown then return end
-lastServerHop = tick()
+	if tick() - lastServerHop < serverHopCooldown then return end
+	lastServerHop = tick()
+	print("🌐 No doors left! Searching for new server...")
 
+	while true do
+		local success, data = pcall(function()
+			return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+		end)
 
-print("🌐 No doors left! Attempting server hop...")
+		if success and data and data.data then
+			local servers = {}
+			for _, s in ipairs(data.data) do
+				if s.playing < s.maxPlayers and s.id ~= game.JobId then
+					table.insert(servers, s)
+				end
+			end
 
-local success, data = pcall(function()
-	return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
-end)
-if not success or not data or not data.data then
-	warn("❌ Failed to get server list. Retrying in 5s...")
-	task.wait(5)
-	return serverHop()
-end
+			if #servers > 0 then
+				local target = servers[math.random(1, #servers)]
+				print("🛰 Found! Hopping to:", target.id)
 
-local servers = {}
-for _, s in ipairs(data.data) do
-	if s.playing < s.maxPlayers and s.id ~= game.JobId then
-		table.insert(servers, s)
+				queue_on_teleport([[\n					print("🎃 Auto Candy Farm Reloading on new server...")\n					loadstring(game:HttpGet("https://raw.githubusercontent.com/ainthewolrd-collab/sss/refs/heads/main/JJS%20AUTO"))()\n					task.wait(1.5)\n				]])
+
+				local ok, err = pcall(function()
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, target.id, player)
+				end)
+				if not ok then
+					warn("❌ Teleport failed:", err, "retrying fast...")
+				else
+					break
+				end
+			else
+				print("⚠️ No empty servers found, retrying in 2s...")
+			end
+		else
+			warn("❌ Failed to get server list, retrying in 2s...")
+		end
+		task.wait(2)
 	end
-end
-
-if #servers > 0 then
-	local target = servers[math.random(1, #servers)]
-	print("🛰 Hopping to public server:", target.id)
-
-	queue_on_teleport([[
-		print("🎃 Auto Candy Farm Reloading on new server...")
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/ainthewolrd-collab/sss/refs/heads/main/JJS%20AUTO"))()
-		task.wait(2) -- รอ environment server ใหม่
-	]])
-
-	local ok, err = pcall(function()
-		TeleportService:TeleportToPlaceInstance(game.PlaceId, target.id, player)
-	end)
-	if not ok then
-		warn("❌ Teleport failed:", err, "Retrying in 5s...")
-		task.wait(5)
-		return serverHop()
-	end
-else
-	print("⚠️ No available public servers found. Retrying in 10s...")
-	task.wait(10)
-	return serverHop()
-end
-
-
 end
 
 --- Infinite teleport loop for continuous auto farm
 task.spawn(function()
-while true do
-task.wait(loopDelay)
-if autoFarm and hrp and hrp.Parent then
-local prompts = getAllOpenPrompts()
-if #prompts == 0 then
-task.wait(checkEmptyDelay)
-local again = getAllOpenPrompts()
-if #again == 0 then
-serverHop()
-end
-else
-for i, prompt in ipairs(prompts) do
-if not autoFarm then break end
-task.spawn(teleportAndTrigger, prompt)
-if i % 10 == 0 then task.wait(0.02) end
-end
-end
-end
-end
+	while true do
+		task.wait(loopDelay)
+		if autoFarm and hrp and hrp.Parent then
+			local prompts = getAllOpenPrompts()
+			if #prompts == 0 then
+				task.wait(checkEmptyDelay)
+				local again = getAllOpenPrompts()
+				if #again == 0 then
+					serverHop()
+				end
+			else
+				for i, prompt in ipairs(prompts) do
+					if not autoFarm then break end
+					task.spawn(teleportAndTrigger, prompt)
+					if i % 10 == 0 then task.wait(0.02) end
+				end
+			end
+		end
+	end
 end)
 
-print("🎃 Ultra Instant TP Auto Candy Farm (Safe ServerHop + Continuous + GUI Ready) Loaded!")
+print("🎃 Ultra Instant TP Auto Candy Farm (Fast ServerHop + Continuous + GUI Ready) Loaded!")
