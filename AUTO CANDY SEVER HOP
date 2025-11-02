@@ -1,9 +1,15 @@
--- ⚡ Ultra Instant TP Auto Candy Farm (ServerHop + Retry + Discord Log + GUI Candy Tracker)
--- Author: Capm | Modified by Durckzdf
+-- ⚡ Ultra Instant TP Auto Candy Farm (Discord Log + ServerHop + Candy Tracker)
+-- Teleports 1-by-1 + Rapid auto Open + Auto Retry if Teleport Fails
+-- Tracks Candy gained per server + total + session duration
+-- Author: Capm (modified by Durckzdf)
 
+---------------------------------------------------
+-- 🧩 Services
+---------------------------------------------------
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
+
 local player = Players.LocalPlayer
 local char = player.Character or player.CharacterAdded:Wait()
 local hrp = char:WaitForChild("HumanoidRootPart")
@@ -14,53 +20,33 @@ local hrp = char:WaitForChild("HumanoidRootPart")
 local targetActionText = "Open"
 local teleportOffset = Vector3.new(0, 3, 0)
 local autoFarm = true
+local teleportDelay = 0
 local loopDelay = 0.01
 local clickBurst = 3
 local checkEmptyDelay = 1
 local serverHopCooldown = 30
 local lastServerHop = 0
 local retryDelay = 2
----------------------------------------------------
--- 📊 LOG SYSTEM
----------------------------------------------------
-local totalCandy = 0
-local serverCandy = 0
-local serverCount = 1
-local lastGuiCandy = 0
----------------------------------------------------
--- 📡 DISCORD LOGGER
----------------------------------------------------
-local webhookURL = "https://canary.discord.com/api/webhooks/1434570114463699084/VGFUE-hd6L3SkX_HOTm51zx9Il8g63w05MdLvC6opHZq2ZWPyM7a2EPUBYXKcW5AO6Yp" -- ⚠️ เปลี่ยนตรงนี้เป็นของคุณเอง
+local startTime = tick()
+local candyStart = 0
+local candyTotal = 0
+local hopCount = 0
 
-local function sendToDiscord(title, message)
-	if not webhookURL or webhookURL == "" then return end
-	local data = {
-		["username"] = "🎃 Candy Logger",
-		["embeds"] = {{
-			["title"] = title,
-			["description"] = message,
-			["color"] = 16746496,
-			["timestamp"] = DateTime.now():ToIsoDate(),
-		}}
-	}
-	local json = HttpService:JSONEncode(data)
-	pcall(function()
-		local req = request or http_request or syn.request or fluxus.request
-		if req then
-			req({
-				Url = webhookURL,
-				Method = "POST",
-				Headers = {["Content-Type"] = "application/json"},
-				Body = json
-			})
-		else
-			HttpService:PostAsync(webhookURL, json, Enum.HttpContentType.ApplicationJson)
-		end
-	end)
-end
+-- Discord Webhook
+local webhookURL = "https://canary.discord.com/api/webhooks/1434567789036830944/RMcjO9oDL9N82GCSKT_kFxEnp1fSNA09rw4IKo1Hr7JdhTzAhlH6On2vLc1wzmUvmRJI"
 
 ---------------------------------------------------
--- 🍬 TRACK GUI CANDY
+-- 🧙 Respawn Fix
+---------------------------------------------------
+player.CharacterAdded:Connect(function(newChar)
+	char = newChar
+	hrp = char:WaitForChild("HumanoidRootPart")
+	task.wait(3)
+	print("🧙 Respawned, continuing auto farm...")
+end)
+
+---------------------------------------------------
+-- 🍬 Candy Tracker
 ---------------------------------------------------
 local function getCandyAmount()
 	local gui = player:FindFirstChild("PlayerGui")
@@ -70,49 +56,42 @@ local function getCandyAmount()
 	local amount = candies:FindFirstChild("Amount")
 	if not amount then return nil end
 	if amount:IsA("TextLabel") or amount:IsA("TextButton") then
-		return tonumber((amount.Text:gsub("%D", ""))) or 0
+		local num = tonumber((amount.Text:gsub("%D", "")))
+		return num
 	end
 	return nil
 end
 
-task.spawn(function()
-	while task.wait(5) do
-		local current = getCandyAmount()
-		if current and current ~= lastGuiCandy then
-			local diff = current - lastGuiCandy
-			if diff > 0 then
-				print("🍭 Candy GUI:", current, "(+ " .. diff .. ")")
-				sendToDiscord("🍬 Candy Updated", string.format("Candy ปัจจุบันบน GUI: %d (+%d)", current, diff))
-			end
-			lastGuiCandy = current
-		end
-	end
-end)
-
 ---------------------------------------------------
--- 🍭 DETECT CANDY FROM EFFECT
+-- 🌐 Discord Logger
 ---------------------------------------------------
-local function waitForCandy(timeout)
-	local folder = workspace:FindFirstChild("Effects")
-	if not folder then return false end
-	local start = tick()
-	while tick() - start < (timeout or 10) do
-		for _, v in ipairs(folder:GetChildren()) do
-			if v.Name:lower():find("candy") then
-				totalCandy += 1
-				serverCandy += 1
-				print("✅ Candy +1 | เซิร์ฟนี้:", serverCandy, "| รวมทั้งหมด:", totalCandy)
-				sendToDiscord("🍬 Candy Collected", string.format("Candy +1\nเซิร์ฟนี้: %d\nรวมทั้งหมด: %d", serverCandy, totalCandy))
-				return true
-			end
-		end
-		task.wait(0.5)
+local function sendToDiscord(title, description)
+	local payload = {
+		username = "🎃 Candy Logger",
+		embeds = {{
+			title = title,
+			description = description,
+			color = 0xFFA500,
+			footer = { text = "Auto Candy Farm by Durckzdf" },
+			timestamp = DateTime.now():ToIsoDate()
+		}}
+	}
+	local jsonData = HttpService:JSONEncode(payload)
+	local request = http_request or request or HttpPost or syn and syn.request
+	if request then
+		pcall(function()
+			request({
+				Url = webhookURL,
+				Method = "POST",
+				Headers = { ["Content-Type"] = "application/json" },
+				Body = jsonData
+			})
+		end)
 	end
-	return false
 end
 
 ---------------------------------------------------
--- 🚀 TELEPORT + OPEN PROMPTS
+-- 🧩 Get BasePart from Attachment
 ---------------------------------------------------
 local function getBasePartFromAttachment(attachment)
 	if not attachment or not attachment:IsA("Attachment") then return nil end
@@ -123,6 +102,9 @@ local function getBasePartFromAttachment(attachment)
 	return parent
 end
 
+---------------------------------------------------
+-- 🚀 Teleport + Rapid Trigger
+---------------------------------------------------
 local function teleportAndTrigger(prompt)
 	if not prompt or not prompt:IsA("ProximityPrompt") then return end
 	if not hrp or not hrp.Parent then return end
@@ -137,7 +119,6 @@ local function teleportAndTrigger(prompt)
 		prompt.MaxActivationDistance = math.huge
 	end)
 
-	print("🍬 กำลังเปิด:", part.Parent.Name)
 	hrp.CFrame = part.CFrame + teleportOffset
 	for i = 1, clickBurst do
 		task.defer(function()
@@ -146,16 +127,10 @@ local function teleportAndTrigger(prompt)
 			end)
 		end)
 	end
-
-	if waitForCandy(8) then
-		print("🎁 Candy มาแล้ว! หาใหม่...")
-	else
-		print("⏳ ไม่มี Candy ภายใน 8 วิ หาใหม่...")
-	end
 end
 
 ---------------------------------------------------
--- 🔍 FIND PROMPTS
+-- 🔍 Find all "Open" prompts
 ---------------------------------------------------
 local function getAllOpenPrompts()
 	local prompts = {}
@@ -168,7 +143,7 @@ local function getAllOpenPrompts()
 end
 
 ---------------------------------------------------
--- 🌐 SERVER HOP SYSTEM
+-- 🌐 Server Hop System (with auto retry)
 ---------------------------------------------------
 local function tryTeleport(target)
 	local success, err = pcall(function()
@@ -176,7 +151,7 @@ local function tryTeleport(target)
 	end)
 	if not success then
 		if string.find(tostring(err), "773") then
-			print("⚠️ Teleport restricted (773). Retrying...")
+			print("⚠️ Teleport restricted (773). Retrying in " .. retryDelay .. "s...")
 			task.wait(retryDelay)
 			return false
 		else
@@ -189,11 +164,25 @@ end
 local function serverHop()
 	if tick() - lastServerHop < serverHopCooldown then return end
 	lastServerHop = tick()
+	hopCount += 1
 
-	serverCount += 1
-	print(string.format("🌐 กำลัง Hop ไปเซิร์ฟ #%d | Candy เซิร์ฟก่อนหน้า: %d | รวมทั้งหมด: %d", serverCount, serverCandy, totalCandy))
-	sendToDiscord("🌐 Server Hop", string.format("ย้ายไปเซิร์ฟ #%d\nCandy ก่อนหน้า: %d\nรวมทั้งหมด: %d", serverCount, serverCandy, totalCandy))
-	serverCandy = 0
+	local candyNow = getCandyAmount() or 0
+	local candyThisServer = candyNow - candyStart
+	local timeSpent = (tick() - startTime) / 60
+	candyTotal += candyThisServer
+
+	local summary = string.format(
+		"🧍‍♂️ ผู้เล่น: **%s**\n🍬 Candy เซิร์ฟนี้: **%d**\n🕓 อยู่ในเซิร์ฟนี้: **%.2f นาที**\n🌍 รวมเซิร์ฟทั้งหมด: **%d**\n🎁 Candy รวมทั้งหมด: **%d**",
+		player.DisplayName or player.Name,
+		candyThisServer,
+		timeSpent,
+		hopCount,
+		candyTotal
+	)
+	print(summary)
+	sendToDiscord("🌐 Server Hop", summary)
+
+	print("🌐 No doors left! Server hopping to new server...")
 
 	local success, data = pcall(function()
 		return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/9391468976/servers/Public?sortOrder=Asc&limit=100"))
@@ -213,23 +202,38 @@ local function serverHop()
 	if #servers > 0 then
 		local target = servers[math.random(1, #servers)]
 		print("🛰 Hopping to:", target.id)
-		queue_on_teleport([[
-			print("🎃 Auto Candy Farm Reloading...")
-			loadstring(game:HttpGet("https://raw.githubusercontent.com/ainthewolrd-collab/sss/refs/heads/main/JJS%20AUTO"))();
-		]])
+		queue_on_teleport([[print("🎃 Auto Candy Farm Reloading on new server...") loadstring(game:HttpGet("https://raw.githubusercontent.com/ainthewolrd-collab/sss/refs/heads/main/JJS%20AUTO"))() ]])
 		while not tryTeleport(target) do
 			local newTarget = servers[math.random(1, #servers)]
 			print("🔄 Retrying teleport to:", newTarget.id)
 		end
 	else
-		print("⚠️ No servers found, retry soon...")
+		print("⚠️ No available servers found. Retrying soon...")
 		task.wait(retryDelay)
 		serverHop()
 	end
 end
 
 ---------------------------------------------------
--- 🔁 MAIN LOOP
+-- 🍭 Candy Change Monitor
+---------------------------------------------------
+task.spawn(function()
+	candyStart = getCandyAmount() or 0
+	while task.wait(3) do
+		local candyNow = getCandyAmount()
+		if candyNow and candyNow ~= candyStart then
+			local diff = candyNow - candyStart
+			if diff > 0 then
+				print("🍬 ได้แคนดี้เพิ่ม +", diff)
+				sendToDiscord("🍭 Candy Update", string.format("ผู้เล่น: %s\n🎁 ได้เพิ่ม: +%d\n🍬 รวมทั้งหมดตอนนี้: %d", player.DisplayName or player.Name, diff, candyNow))
+			end
+			candyStart = candyNow
+		end
+	end
+end)
+
+---------------------------------------------------
+-- 🔁 Infinite teleport loop
 ---------------------------------------------------
 task.spawn(function()
 	while task.wait(loopDelay) do
@@ -252,5 +256,4 @@ task.spawn(function()
 	end
 end)
 
-print("🎃 Ultra Instant TP Auto Candy Farm (Full Version with Discord & GUI Tracker) Loaded!")
-sendToDiscord("✅ Script Loaded", "เริ่มต้นระบบฟาร์ม Candy อัตโนมัติแล้ว!")
+print("🎃 Ultra Instant TP Auto Candy Farm (Discord Log + ServerHop + Tracker) Loaded!")
