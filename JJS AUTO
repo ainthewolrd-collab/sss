@@ -1,13 +1,13 @@
 -- ⚡ Ultra Instant TP Auto Candy Farm (Safe ServerHop + Continuous Auto Farm + GUI)
 -- Author: Capm (modified with serverhop by Durckzdf)
 
-local Players = game("Players")
-local UserInputService = game("UserInputService")
-local TeleportService = game("TeleportService")
-local HttpService = game("HttpService")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
-local char = player.Character or player.CharacterAdded()
-local hrp = char("HumanoidRootPart")
+local char = player.Character or player.CharacterAdded:Wait()
+local hrp = char:WaitForChild("HumanoidRootPart")
 
 --- SETTINGS
 local targetActionText = "Open"
@@ -15,7 +15,7 @@ local teleportOffset = Vector3.new(0, 3, 0)
 local autoFarm = true
 local teleportDelay = 0
 local loopDelay = 0.01
-local clickBurst = 3
+local clickBurst = 1
 local checkEmptyDelay = 1
 local serverHopCooldown = 30
 local lastServerHop = 0
@@ -23,7 +23,7 @@ local lastServerHop = 0
 --- GUI Setup
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "CandyFarmGUI"
-ScreenGui.Parent = player("PlayerGui")
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
 
 local ToggleButton = Instance.new("TextButton")
 ToggleButton.Size = UDim2.new(0, 150, 0, 50)
@@ -34,7 +34,7 @@ ToggleButton.TextScaled = true
 ToggleButton.Text = "Auto Farm: ON"
 ToggleButton.Parent = ScreenGui
 
-ToggleButton.MouseButton1Click(function()
+ToggleButton.MouseButton1Click:Connect(function()
 autoFarm = not autoFarm
 if autoFarm then
 ToggleButton.Text = "Auto Farm: ON"
@@ -46,18 +46,18 @@ end
 end)
 
 --- Re-get HRP when respawning
-player.CharacterAdded(function(newChar)
+player.CharacterAdded:Connect(function(newChar)
 char = newChar
-hrp = char("HumanoidRootPart")
+hrp = char:WaitForChild("HumanoidRootPart")
 task.wait(2) -- รอ environment โหลดพร้อม
 print("🧙 Respawned, continuing auto farm...")
 end)
 
 --- Get BasePart from Attachment
 local function getBasePartFromAttachment(attachment)
-if not attachment or not attachment("Attachment") then return nil end
+if not attachment or not attachment:IsA("Attachment") then return nil end
 local parent = attachment.Parent
-while parent and not parent("BasePart") do
+while parent and not parent:IsA("BasePart") do
 parent = parent.Parent
 end
 return parent
@@ -65,10 +65,9 @@ end
 
 --- Teleport + Rapid Trigger
 local function teleportAndTrigger(prompt)
-if not prompt or not prompt("ProximityPrompt") then return end
+if not prompt or not prompt:IsA("ProximityPrompt") then return end
 if not hrp or not hrp.Parent then return end
 
-```
 local attachment = prompt.Parent
 local part = getBasePartFromAttachment(attachment)
 if not part then return end
@@ -87,15 +86,15 @@ for i = 1, clickBurst do
 		end)
 	end)
 end
-```
+
 
 end
 
 --- Find all "Open" prompts
 local function getAllOpenPrompts()
 local prompts = {}
-for _, obj in ipairs(workspace()) do
-if obj("ProximityPrompt") and obj.Enabled and obj.ActionText() == targetActionText() then
+for _, obj in ipairs(workspace:GetDescendants()) do
+if obj:IsA("ProximityPrompt") and obj.Enabled and obj.ActionText:lower() == targetActionText:lower() then
 table.insert(prompts, obj)
 end
 end
@@ -107,7 +106,7 @@ local function serverHop()
 if tick() - lastServerHop < serverHopCooldown then return end
 lastServerHop = tick()
 
-```
+
 print("🌐 No doors left! Attempting server hop...")
 
 local success, data = pcall(function()
@@ -149,7 +148,7 @@ else
 	task.wait(5)
 	return serverHop()
 end
-```
+
 
 end
 
