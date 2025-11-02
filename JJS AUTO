@@ -1,42 +1,59 @@
--- ⚡ Ultra Instant TP Auto Candy Farm (ServerHop + Respawn Fix)
--- Teleports 1-by-1 + Rapid auto Open
+-- ⚡ Ultra Instant TP Auto Candy Farm (Safe ServerHop + Continuous Auto Farm + GUI)
 -- Author: Capm (modified with serverhop by Durckzdf)
 
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local char = player.Character or player.CharacterAdded:Wait()
 local hrp = char:WaitForChild("HumanoidRootPart")
 
----
-
--- ⚙️ SETTINGS
-
+--- SETTINGS
 local targetActionText = "Open"
 local teleportOffset = Vector3.new(0, 3, 0)
 local autoFarm = true
 local teleportDelay = 0
-local loopDelay = 0.05
-local clickBurst = 4
-local checkEmptyDelay = 5
-local serverHopCooldown = 60
+local loopDelay = 0.01
+local clickBurst = 3
+local checkEmptyDelay = 1
+local serverHopCooldown = 30
 local lastServerHop = 0
 
----
+--- GUI Setup
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "CandyFarmGUI"
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
 
--- 🧩 Re-get HRP when respawning
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0, 150, 0, 50)
+ToggleButton.Position = UDim2.new(0.05,0,0.05,0)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+ToggleButton.TextColor3 = Color3.new(1,1,1)
+ToggleButton.TextScaled = true
+ToggleButton.Text = "Auto Farm: ON"
+ToggleButton.Parent = ScreenGui
 
+ToggleButton.MouseButton1Click:Connect(function()
+autoFarm = not autoFarm
+if autoFarm then
+ToggleButton.Text = "Auto Farm: ON"
+print("🎃 Auto Farm ENABLED")
+else
+ToggleButton.Text = "Auto Farm: OFF"
+print("⏸ Auto Farm PAUSED")
+end
+end)
+
+--- Re-get HRP when respawning
 player.CharacterAdded:Connect(function(newChar)
 char = newChar
 hrp = char:WaitForChild("HumanoidRootPart")
-task.wait(3)
+task.wait(2) -- รอ environment โหลดพร้อม
 print("🧙 Respawned, continuing auto farm...")
 end)
 
----
-
- -- 🧩 Get BasePart from Attachment
+--- Get BasePart from Attachment
 local function getBasePartFromAttachment(attachment)
 if not attachment or not attachment:IsA("Attachment") then return nil end
 local parent = attachment.Parent
@@ -46,14 +63,10 @@ end
 return parent
 end
 
----
-
--- 🚀 Teleport + Rapid Trigger
-
+--- Teleport + Rapid Trigger
 local function teleportAndTrigger(prompt)
 if not prompt or not prompt:IsA("ProximityPrompt") then return end
 if not hrp or not hrp.Parent then return end
-
 
 local attachment = prompt.Parent
 local part = getBasePartFromAttachment(attachment)
@@ -65,7 +78,6 @@ pcall(function()
 	prompt.MaxActivationDistance = math.huge
 end)
 
--- 💨 Instant teleport + burst fire
 hrp.CFrame = part.CFrame + teleportOffset
 for i = 1, clickBurst do
 	task.defer(function()
@@ -78,10 +90,7 @@ end
 
 end
 
----
-
--- 🔍 Find all "Open" prompts
-
+--- Find all "Open" prompts
 local function getAllOpenPrompts()
 local prompts = {}
 for _, obj in ipairs(workspace:GetDescendants()) do
@@ -92,23 +101,21 @@ end
 return prompts
 end
 
----
-
--- 🌐 Server Hop System (with auto reload)
-
+--- Safe Server Hop
 local function serverHop()
 if tick() - lastServerHop < serverHopCooldown then return end
 lastServerHop = tick()
 
 
-print("🌐 No doors left! Server hopping to new server...")
+print("🌐 No doors left! Attempting server hop...")
 
 local success, data = pcall(function()
 	return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
 end)
 if not success or not data or not data.data then
-	warn("❌ Failed to get server list.")
-	return
+	warn("❌ Failed to get server list. Retrying in 5s...")
+	task.wait(5)
+	return serverHop()
 end
 
 local servers = {}
@@ -120,30 +127,36 @@ end
 
 if #servers > 0 then
 	local target = servers[math.random(1, #servers)]
-	print("🛰 Hopping to:", target.id)
+	print("🛰 Hopping to public server:", target.id)
 
-	-- ✅ Queue auto farm reload before teleport
 	queue_on_teleport([[
 		print("🎃 Auto Candy Farm Reloading on new server...")
-		loadstring(game:HttpGet("https://pastebin.com/raw/Z4AijjSF"))()
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/ainthewolrd-collab/sss/refs/heads/main/JJS%20AUTO"))()
+		task.wait(2) -- รอ environment server ใหม่
 	]])
 
-	-- Teleport to the new server
-	TeleportService:TeleportToPlaceInstance(game.PlaceId, target.id, player)
+	local ok, err = pcall(function()
+		TeleportService:TeleportToPlaceInstance(game.PlaceId, target.id, player)
+	end)
+	if not ok then
+		warn("❌ Teleport failed:", err, "Retrying in 5s...")
+		task.wait(5)
+		return serverHop()
+	end
 else
-	print("⚠️ No available servers found. Retrying soon...")
+	print("⚠️ No available public servers found. Retrying in 10s...")
+	task.wait(10)
+	return serverHop()
 end
 
 
 end
 
----
-
--- 🔁 Infinite teleport loop
-
+--- Infinite teleport loop for continuous auto farm
 task.spawn(function()
-while task.wait(loopDelay) do
-if autoFarm then
+while true do
+task.wait(loopDelay)
+if autoFarm and hrp and hrp.Parent then
 local prompts = getAllOpenPrompts()
 if #prompts == 0 then
 task.wait(checkEmptyDelay)
@@ -162,4 +175,4 @@ end
 end
 end)
 
-print("🎃 Ultra Instant TP Auto Candy Farm (ServerHop Ready) Loaded!")
+print("🎃 Ultra Instant TP Auto Candy Farm (Safe ServerHop + Continuous + GUI Ready) Loaded!")
