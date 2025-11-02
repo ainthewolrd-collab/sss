@@ -1,6 +1,6 @@
--- ⚡ Ultra Instant TP Auto Candy Farm (ServerHop + Respawn Fix + RetryHop)
+-- ⚡ Ultra Instant TP Auto Candy Farm (ServerHop + Respawn Fix + RetryHop + Candy Log)
 -- Teleports 1-by-1 + Rapid auto Open + Auto Retry if Teleport Fails
--- Author: Capm (modified with serverhop & retry by Durckzdf)
+-- Author: Capm (modified by Durckzdf with serverhop, retry, and logging)
 
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
@@ -23,6 +23,12 @@ local serverHopCooldown = 30
 local lastServerHop = 0
 local retryDelay = 2 -- หน่วงก่อน retry เมื่อเจอ 773
 ---------------------------------------------------
+-- 📊 LOG SYSTEM
+---------------------------------------------------
+local totalCandy = 0
+local serverCandy = 0
+local serverCount = 1
+---------------------------------------------------
 
 player.CharacterAdded:Connect(function(newChar)
 	char = newChar
@@ -44,6 +50,27 @@ local function getBasePartFromAttachment(attachment)
 end
 
 ---------------------------------------------------
+-- 🍬 Detect candy spawn
+---------------------------------------------------
+local function waitForCandy(timeout)
+	local folder = workspace:FindFirstChild("Effects")
+	if not folder then return false end
+	local start = tick()
+	while tick() - start < (timeout or 10) do
+		for _, v in ipairs(folder:GetChildren()) do
+			if v.Name:lower():find("candy") then
+				totalCandy += 1
+				serverCandy += 1
+				print("✅ Candy +1 | เซิร์ฟนี้:", serverCandy, "| รวมทั้งหมด:", totalCandy)
+				return true
+			end
+		end
+		task.wait(0.5)
+	end
+	return false
+end
+
+---------------------------------------------------
 -- 🚀 Teleport + Rapid Trigger
 ---------------------------------------------------
 local function teleportAndTrigger(prompt)
@@ -60,6 +87,7 @@ local function teleportAndTrigger(prompt)
 		prompt.MaxActivationDistance = math.huge
 	end)
 
+	print("🍬 กำลังเปิด:", part.Parent.Name)
 	hrp.CFrame = part.CFrame + teleportOffset
 	for i = 1, clickBurst do
 		task.defer(function()
@@ -67,6 +95,12 @@ local function teleportAndTrigger(prompt)
 				fireproximityprompt(prompt, 1)
 			end)
 		end)
+	end
+
+	if waitForCandy(8) then
+		print("🎁 Candy มาแล้ว! เดินหาประตูต่อ...")
+	else
+		print("⏳ ไม่มี Candy ภายในเวลา 8 วิ หาใหม่...")
 	end
 end
 
@@ -84,7 +118,7 @@ local function getAllOpenPrompts()
 end
 
 ---------------------------------------------------
--- 🌐 Server Hop System (with auto retry)
+-- 🌐 Server Hop System (with auto retry + logs)
 ---------------------------------------------------
 local function tryTeleport(target)
 	local success, err = pcall(function()
@@ -106,7 +140,7 @@ local function serverHop()
 	if tick() - lastServerHop < serverHopCooldown then return end
 	lastServerHop = tick()
 
-	print("🌐 No doors left! Server hopping to new server...")
+	print("🌐 No doors left! Preparing to hop...")
 
 	local success, data = pcall(function()
 		return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/9391468976/servers/Public?sortOrder=Asc&limit=100"))
@@ -124,11 +158,20 @@ local function serverHop()
 	end
 
 	if #servers > 0 then
-		local target = servers[math.random(1, #servers)]
-		print("🛰 Hopping to:", target.id)
+		serverCount += 1
+		print(string.format("🛰 Hop ไปยังเซิร์ฟ #%d | Candy เซิร์ฟก่อนหน้า: %d | รวมทั้งหมด: %d", serverCount, serverCandy, totalCandy))
+		serverCandy = 0
 
-		queue_on_teleport([[print("🎃 Auto Candy Farm Reloading on new server...") loadstring(game:HttpGet("https://raw.githubusercontent.com/ainthewolrd-collab/sss/refs/heads/main/JJS%20AUTO"))() ]])
-loadstring(game:HttpGet("https://raw.githubusercontent.com/hassanxzayn-lua/Anti-afk/main/antiafkbyhassanxzyn"))();
+		local target = servers[math.random(1, #servers)]
+		print("🌐 กำลังเข้าเซิร์ฟ:", target.id)
+
+		queue_on_teleport([[
+			print("🎃 Auto Candy Farm Reloading on new server...")
+			print("🛡️ Anti-AFK Loaded!")
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/hassanxzayn-lua/Anti-afk/main/antiafkbyhassanxzyn"))();
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/ainthewolrd-collab/sss/refs/heads/main/JJS%20AUTO"))();
+		]])
+
 		while not tryTeleport(target) do
 			local newTarget = servers[math.random(1, #servers)]
 			print("🔄 Retrying teleport to:", newTarget.id)
@@ -163,4 +206,5 @@ task.spawn(function()
 		end
 	end
 end)
-print("🎃 Ultra Instant TP Auto Candy Farm (ServerHop + Retry Ready) Loaded!")
+
+print("🎃 Ultra Instant TP Auto Candy Farm (ServerHop + Retry + Log + Anti-AFK) Loaded!")
