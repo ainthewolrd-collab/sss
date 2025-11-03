@@ -108,7 +108,7 @@ local attachment = prompt.Parent
 local part = getBasePartFromAttachment(attachment)
 if not part then return end
 
-```
+
 pcall(function()
     prompt.HoldDuration = 0
     prompt.RequiresLineOfSight = false
@@ -123,7 +123,6 @@ for i = 1, clickBurst do
         end)
     end)
 end
-```
 
 end
 
@@ -161,7 +160,7 @@ if tick() - lastServerHop < serverHopCooldown then return end
 lastServerHop = tick()
 hopCount += 1
 
-```
+
 local candyNow = getCandyAmount() or 0
 local candyThisServer = candyNow - candyStart
 local timeSpent = (tick() - startTime) / 60
@@ -252,7 +251,7 @@ else
     task.wait(retryDelay)
     serverHop()
 end
-```
+
 
 end
 
