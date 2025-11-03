@@ -1,17 +1,16 @@
--- ⚡ Ultra Instant TP Auto Candy Farm (Final v3.1)
--- ✅ Fixed Discord Log (guaranteed before hop)
--- ✅ Reliable ServerHop + Retry + No Cache
--- ✅ Candy Tracker + Respawn Fix + Discord Summary
--- Author: Capm (modified by Durckzdf)
----------------------------------------------------
+-- ⚡ Ultra Instant TP Auto Candy Farm (Discord Log + ServerHop + Candy Tracker)
+-- Teleports 1-by-1 + Rapid auto Open + Auto Retry if Teleport Fails
+-- Tracks Candy gained per server + total + session duration
+-- Author: Capm (Modified by Durckzdf)
+-- Version: Final v3.1 (Safe Reload + Discord Log Fix)
 
+---------------------------------------------------
+-- 🧩 Services
+---------------------------------------------------
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
-
 local player = Players.LocalPlayer
-local char = player.Character or player.CharacterAdded:Wait()
-local hrp = char:WaitForChild("HumanoidRootPart")
 
 ---------------------------------------------------
 -- ⚙️ SETTINGS
@@ -19,112 +18,79 @@ local hrp = char:WaitForChild("HumanoidRootPart")
 local targetActionText = "Open"
 local teleportOffset = Vector3.new(0, 3, 0)
 local autoFarm = true
+local teleportDelay = 0
 local loopDelay = 0.01
-local clickBurst = 3
+local clickBurst = 1
 local checkEmptyDelay = 1
 local serverHopCooldown = 30
-local lastServerHop = 0
-local retryDelay = 2
-local startTime = tick()
-local candyStart = 0
-local candyTotal = 0
-local hopCount = 0
-
--- Discord Webhook
-local webhookURL = "https://canary.discord.com/api/webhooks/1434567789036830944/RMcjO9oDL9N82GCSKT_kFxEnp1fSNA09rw4IKo1Hr7JdhTzAhlH6On2vLc1wzmUvmRJI"
+local webhookUrl = "YOUR_DISCORD_WEBHOOK_HERE" -- 🔧 เปลี่ยนเป็นของคุณ
+local placeId = 9391468976
 
 ---------------------------------------------------
--- 🧙 Respawn Fix
+-- 🕒 Safe init (fix queue_on_teleport race condition)
 ---------------------------------------------------
-player.CharacterAdded:Connect(function(newChar)
-	char = newChar
-	hrp = char:WaitForChild("HumanoidRootPart")
-	task.wait(3)
-	print("🧙 Respawned, continuing auto farm...")
-end)
+repeat task.wait() until game:IsLoaded()
+repeat task.wait() until Players.LocalPlayer
+task.wait(3)
+print("✅ Game fully loaded, starting Candy Farm...")
 
 ---------------------------------------------------
 -- 🍬 Candy Tracker
 ---------------------------------------------------
-local function getCandyAmount()
-	local gui = player:FindFirstChild("PlayerGui")
-	if not gui then return nil end
-	local candies = gui:FindFirstChild("Candies")
-	if not candies then return nil end
-	local amount = candies:FindFirstChild("Amount")
-	if not amount then return nil end
-	if amount:IsA("TextLabel") or amount:IsA("TextButton") then
-		local num = tonumber((amount.Text:gsub("%D", "")))
-		return num
-	end
-	return nil
+local totalCandy = 0
+local serverCandy = 0
+local serverStart = tick()
+
+local function logCandyGained()
+	local duration = math.floor(tick() - serverStart)
+	print(string.format("🍭 Candy รอบนี้: %d | รวมทั้งหมด: %d | เวลา: %ds", serverCandy, totalCandy, duration))
 end
 
 ---------------------------------------------------
--- 🌐 Discord Logger (guaranteed send)
+-- 🪣 Discord Logger
 ---------------------------------------------------
-local function sendToDiscord(title, description)
-	local payload = {
-		username = "🎃 Candy Logger",
-		embeds = {{
-			title = title,
-			description = description,
-			color = 0xFFA500,
-			footer = { text = "Auto Candy Farm by Durckzdf" },
-			timestamp = DateTime.now():ToIsoDate()
-		}}
-	}
-	local jsonData = HttpService:JSONEncode(payload)
-	local request = http_request or request or HttpPost or (syn and syn.request)
-	if request then
-		pcall(function()
-			request({
-				Url = webhookURL,
-				Method = "POST",
-				Headers = { ["Content-Type"] = "application/json" },
-				Body = jsonData
-			})
+local function sendToDiscord(title, message)
+	task.spawn(function()
+		local data = {
+			["content"] = "",
+			["embeds"] = {{
+				["title"] = title,
+				["description"] = message,
+				["color"] = 0xFFA500,
+				["footer"] = {["text"] = "Auto Candy Farm v3.1"}
+			}}
+		}
+
+		local ok, err = pcall(function()
+			if syn and syn.request then
+				syn.request({
+					Url = webhookUrl,
+					Method = "POST",
+					Headers = {["Content-Type"] = "application/json"},
+					Body = HttpService:JSONEncode(data)
+				})
+			elseif http_request then
+				http_request({
+					Url = webhookUrl,
+					Method = "POST",
+					Headers = {["Content-Type"] = "application/json"},
+					Body = HttpService:JSONEncode(data)
+				})
+			elseif request then
+				request({
+					Url = webhookUrl,
+					Method = "POST",
+					Headers = {["Content-Type"] = "application/json"},
+					Body = HttpService:JSONEncode(data)
+				})
+			else
+				game:GetService("HttpService"):PostAsync(webhookUrl, HttpService:JSONEncode(data))
+			end
 		end)
-	end
-end
-
----------------------------------------------------
--- 🧩 Get BasePart from Attachment
----------------------------------------------------
-local function getBasePartFromAttachment(attachment)
-	if not attachment or not attachment:IsA("Attachment") then return nil end
-	local parent = attachment.Parent
-	while parent and not parent:IsA("BasePart") do
-		parent = parent.Parent
-	end
-	return parent
-end
-
----------------------------------------------------
--- 🚀 Teleport + Rapid Trigger
----------------------------------------------------
-local function teleportAndTrigger(prompt)
-	if not prompt or not prompt:IsA("ProximityPrompt") then return end
-	if not hrp or not hrp.Parent then return end
-
-	local attachment = prompt.Parent
-	local part = getBasePartFromAttachment(attachment)
-	if not part then return end
-
-	pcall(function()
-		prompt.HoldDuration = 0
-		prompt.RequiresLineOfSight = false
-		prompt.MaxActivationDistance = math.huge
+		if not ok then
+			warn("⚠️ Discord log error:", err)
+		end
 	end)
-
-	hrp.CFrame = part.CFrame + teleportOffset
-	for i = 1, clickBurst do
-		task.defer(function()
-			pcall(function()
-				fireproximityprompt(prompt, 1)
-			end)
-		end)
-	end
 end
 
 ---------------------------------------------------
@@ -141,124 +107,91 @@ local function getAllOpenPrompts()
 end
 
 ---------------------------------------------------
--- 🌐 Server Hop System (Finalized)
+-- 🌀 Main AutoFarm Loop
 ---------------------------------------------------
-local function tryTeleport(target)
-	local success, err = pcall(function()
-		TeleportService:TeleportToPlaceInstance(9391468976, target.id, player)
-	end)
-	if not success then
-		if string.find(tostring(err), "773") then
-			print("⚠️ Teleport restricted (773). Retrying in " .. retryDelay .. "s...")
-			task.wait(retryDelay)
-			return false
+task.spawn(function()
+	sendToDiscord("🍬 Auto Candy Farm Started", "Session started successfully ✅")
+
+	while autoFarm do
+		local prompts = getAllOpenPrompts()
+		if #prompts == 0 then
+			print("⏳ ไม่มีประตู หาใหม่ภายในไม่กี่วินาที...")
+			task.wait(checkEmptyDelay)
 		else
-			warn("❌ Teleport failed:", err)
+			for _, prompt in ipairs(prompts) do
+				local model = prompt.Parent
+				print("🍬 กำลังเปิด:", model.Name)
+				fireproximityprompt(prompt, clickBurst, true)
+				task.wait(teleportDelay)
+
+				-- ตรวจสอบ Candy ใน workspace.Effects
+				local foundCandy = false
+				local start = tick()
+				while tick() - start < 10 do
+					for _, v in ipairs(workspace:GetDescendants()) do
+						if tostring(v):lower():find("candy") then
+							foundCandy = true
+							break
+						end
+					end
+					if foundCandy then break end
+					task.wait(0.5)
+				end
+
+				if foundCandy then
+					print("✅ Candy ได้แล้ว! หาใหม่...")
+					serverCandy += 1
+					totalCandy += 1
+					logCandyGained()
+				else
+					print("⏳ Candy ไม่มาในเวลา 10 วิ หาใหม่...")
+				end
+				task.wait(loopDelay)
+			end
 		end
 	end
-	return true
+end)
+
+---------------------------------------------------
+-- 🌐 Server Hop System
+---------------------------------------------------
+local function serverHop()
+	sendToDiscord("🔄 ServerHop", "Teleporting to a new server...")
+
+	local success, result = pcall(function()
+		return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..placeId.."/servers/Public?sortOrder=Asc&limit=100"))
+	end)
+
+	if success and result and result.data then
+		for _, server in ipairs(result.data) do
+			if server.playing < server.maxPlayers and server.id ~= game.JobId then
+				queue_on_teleport([[
+					task.spawn(function()
+						repeat task.wait() until game:IsLoaded()
+						repeat task.wait() until game:GetService("Players").LocalPlayer
+						task.wait(3)
+						print("🎃 Auto Candy Farm Reloading on new server...")
+						loadstring(game:HttpGet("https://raw.githubusercontent.com/ainthewolrd-collab/sss/refs/heads/main/JJS%20AUTO"))()
+					end)
+				]])
+				TeleportService:TeleportToPlaceInstance(placeId, server.id, player)
+				print("🚀 กำลัง Hop ไปเซิร์ฟใหม่:", server.id)
+				return
+			end
+		end
+	end
+
+	print("⚠️ ไม่พบเซิร์ฟเวอร์ใหม่ ลองอีกครั้งในภายหลัง...")
+	task.wait(5)
+	serverHop()
 end
 
-local function serverHop()
-	if tick() - lastServerHop < serverHopCooldown then return end
-	lastServerHop = tick()
-	hopCount += 1
-
-	local candyNow = getCandyAmount() or 0
-	local candyThisServer = candyNow - candyStart
-	local timeSpent = (tick() - startTime) / 60
-	candyTotal += candyThisServer
-
-	local summary = string.format(
-		"🧍‍♂️ ผู้เล่น: **%s**\n🍬 Candy เซิร์ฟนี้: **%d**\n🕓 อยู่ในเซิร์ฟนี้: **%.2f นาที**\n🌍 รวมเซิร์ฟทั้งหมด: **%d**\n🎁 Candy รวมทั้งหมด: **%d**",
-		player.DisplayName or player.Name,
-		candyThisServer,
-		timeSpent,
-		hopCount,
-		candyTotal
-	)
-
-	print(summary)
-	sendToDiscord("🌐 Server Hop", summary)
-	task.wait(1) -- ✅ ให้เวลา Discord ส่ง log ทันก่อน teleport
-
-	print("🌐 No doors left! Server hopping to new server...")
-
-	local success, data = pcall(function()
-		return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/9391468976/servers/Public?sortOrder=Asc&limit=100"))
-	end)
-	if not success or not data or not data.data then
-		warn("❌ Failed to get server list.")
-		return
-	end
-
-	local servers = {}
-	for _, s in ipairs(data.data) do
-		if s.playing < s.maxPlayers and s.id ~= game.JobId then
-			table.insert(servers, s)
-		end
-	end
-
-	if #servers > 0 then
-		local target = servers[math.random(1, #servers)]
-		print("🛰 Hopping to:", target.id)
-		queue_on_teleport([[print("🎃 Auto Candy Farm Reloading on new server...") loadstring(game:HttpGet("https://raw.githubusercontent.com/ainthewolrd-collab/sss/refs/heads/main/JJS%20AUTO"))()]])
-		while not tryTeleport(target) do
-			local newTarget = servers[math.random(1, #servers)]
-			print("🔄 Retrying teleport to:", newTarget.id)
-		end
-	else
-		print("⚠️ No available servers found. Retrying soon...")
-		task.wait(retryDelay)
+---------------------------------------------------
+-- 🧭 Auto ServerHop Timer
+---------------------------------------------------
+task.spawn(function()
+	while true do
+		task.wait(serverHopCooldown)
 		serverHop()
 	end
-end
-
----------------------------------------------------
--- 🍭 Candy Change Monitor
----------------------------------------------------
-task.spawn(function()
-	candyStart = getCandyAmount() or 0
-	while task.wait(3) do
-		local candyNow = getCandyAmount()
-		if candyNow and candyNow ~= candyStart then
-			local diff = candyNow - candyStart
-			if diff > 0 then
-				print("🍬 ได้แคนดี้เพิ่ม +", diff)
-				sendToDiscord("🍭 Candy Update", string.format(
-					"ผู้เล่น: %s\n🎁 ได้เพิ่ม: +%d\n🍬 รวมทั้งหมดตอนนี้: %d",
-					player.DisplayName or player.Name,
-					diff,
-					candyNow
-				))
-			end
-			candyStart = candyNow
-		end
-	end
 end)
-
----------------------------------------------------
--- 🔁 Infinite teleport loop
----------------------------------------------------
-task.spawn(function()
-	while task.wait(loopDelay) do
-		if autoFarm then
-			local prompts = getAllOpenPrompts()
-			if #prompts == 0 then
-				task.wait(checkEmptyDelay)
-				local again = getAllOpenPrompts()
-				if #again == 0 then
-					serverHop()
-				end
-			else
-				for i, prompt in ipairs(prompts) do
-					if not autoFarm then break end
-					task.spawn(teleportAndTrigger, prompt)
-					if i % 10 == 0 then task.wait(0.02) end
-				end
-			end
-		end
-	end
-end)
-
-print("🎃 Ultra Instant TP Auto Candy Farm (Final v3.1) Loaded!")
